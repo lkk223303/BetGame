@@ -42,7 +42,7 @@ func init() {
 
 	// initialize all redis
 	RC.Del(ctx, UserMember)
-	RC.Del(ctx, BetThisGame)
+	RC.Del(ctx, BetThisRound)
 
 	go GameServer()
 }
@@ -124,7 +124,7 @@ func GameServer() {
 			RC.ZIncrBy(ctx, UserMember, float64(prizePool), winner)
 
 			// 刪除現有Table
-			RC.Del(BetThisRound)
+			RC.Del(ctx, BetThisRound)
 		}
 	}()
 }
@@ -186,7 +186,13 @@ func GetCurrentPrize(c *gin.Context) {
 }
 
 func getCurrentPrize() (prizePool int) {
-	bets, _ := RC.ZRevRangeByScore(ctx, BetThisRound).Result()
+	op := redis.ZRangeBy{
+		Min:    "2",  // 最小分数
+		Max:    "10", // 最大分数
+		Offset: 0,    // 类似sql的limit, 表示开始偏移量
+		Count:  5,    // 一次返回多少数据
+	}
+	bets, _ := RC.ZRevRangeByScore(ctx, BetThisRound, &op).Result()
 	for _, bet := range bets {
 		var userBet UserBet
 		userBet.Amount = int(bet.Score)
@@ -196,7 +202,12 @@ func getCurrentPrize() (prizePool int) {
 }
 
 func GetUserBets(c *gin.Context) {
-
+	UserBets := getUserBets()
+	if len(UserBets) == 0 {
+		wrapResponse(c, nil, error.New("目前沒有任何記錄"))
+		return
+	}
+	wrapResponse(c, UserBets, nil)
 }
 
 func getUserBets() (userBets []UserBet) {
